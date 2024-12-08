@@ -202,36 +202,76 @@
                 });
             }
 
-            // View favorite dishes
-            document.getElementById("viewFavoritesBtn").addEventListener("click", () => {
+            // Add a favorite dish
+            document.getElementById("addFavoriteDishBtn").addEventListener("click", () => {
                 const selectedRestaurant = document.getElementById("restaurantDropdown").value;
+                const favoriteDish = document.getElementById("favoriteDishInput").value;
 
                 if (!selectedRestaurant) {
-                    alert("Please select a restaurant to view favorite dishes.");
+                    alert("Please select a restaurant.");
+                    return;
+                }
+
+                if (!favoriteDish) {
+                    alert("Please enter a favorite dish.");
                     return;
                 }
 
                 const sanitizedRestaurantName = selectedRestaurant.replace(/'/g, "''");
+                const sanitizedDishName = favoriteDish.replace(/'/g, "''");
 
+                const newFeature = {
+                    attributes: {
+                        restaurantName: sanitizedRestaurantName,
+                        favoriteDish: sanitizedDishName
+                    }
+                };
+
+                favoriteDishesLayer.applyEdits({
+                    addFeatures: [newFeature]
+                }).then((result) => {
+                    if (result.addFeatureResults[0].error) {
+                        console.error("Error adding favorite dish:", result.addFeatureResults[0].error);
+                        alert("Failed to add the favorite dish. Please try again.");
+                        return;
+                    }
+                    alert("Favorite dish added successfully!");
+
+                    // Dynamically update the list
+                    const list = document.getElementById("favoriteDishesList");
+                    const li = document.createElement("li");
+                    li.textContent = `${sanitizedDishName} (${sanitizedRestaurantName})`;
+                    list.appendChild(li);
+
+                    // Clear the input field
+                    document.getElementById("favoriteDishInput").value = "";
+                }).catch((error) => {
+                    console.error("Error adding favorite dish:", error);
+                    alert("Error adding favorite dish.");
+                });
+            });
+
+            // View all favorite dishes
+            document.getElementById("viewFavoritesBtn").addEventListener("click", () => {
                 favoriteDishesLayer.queryFeatures({
-                    where: `restaurantName = '${sanitizedRestaurantName}'`,
-                    outFields: ["favoriteDish"],
+                    where: "1=1",
+                    outFields: ["restaurantName", "favoriteDish"],
                     returnGeometry: false
                 }).then((response) => {
                     const list = document.getElementById("favoriteDishesList");
-                    list.innerHTML = "";
+                    list.innerHTML = ""; // Clear the list
                     if (response.features.length === 0) {
-                        list.innerHTML = "<li>No favorite dishes found for this restaurant.</li>";
+                        list.innerHTML = "<li>No favorite dishes found.</li>";
                         return;
                     }
                     response.features.forEach((feature) => {
                         const li = document.createElement("li");
-                        li.textContent = feature.attributes.favoriteDish;
+                        li.textContent = `${feature.attributes.favoriteDish} (${feature.attributes.restaurantName})`;
                         list.appendChild(li);
                     });
                 }).catch((error) => {
-                    console.error("Error querying favorite dishes:", error);
-                    alert("Error retrieving favorite dishes. Check the console for details.");
+                    console.error("Error retrieving favorite dishes:", error);
+                    alert("Error retrieving favorite dishes.");
                 });
             });
 
@@ -253,3 +293,4 @@
     </script>
 </body>
 </html>
+
