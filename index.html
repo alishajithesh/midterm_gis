@@ -1,1 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Restaurant Map with Favorite Dishes</title>
+    <link rel="stylesheet" href="https://js.arcgis.com/4.27/esri/themes/light/main.css">
+    <script src="https://js.arcgis.com/4.27/"></script>
+    <style>
+        #viewDiv {
+            height: 100vh;
+            width: 100%;
+        }
+        .tab {
+            position: absolute;
+            background-color: white;
+            padding: 10px;
+            z-index: 10;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        }
+        #addNewRestaurantTab {
+            top: 10px;
+            left: 10px;
+            width: 300px;
+        }
+        #favoritesTab {
+            bottom: 10px; /* Positioned bottom-right */
+            right: 10px;
+            width: 300px;
+        }
+        #searchBar {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 11;
+            width: 300px;
+        }
+        #searchBar input {
+            width: 240px;
+            padding: 5px;
+        }
+        #searchBar button {
+            padding: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="viewDiv"></div>
 
+    <div id="addNewRestaurantTab" class="tab">
+        <h3>Add New Restaurant</h3>
+        <input type="text" id="restaurantName" placeholder="Restaurant Name">
+        <input type="text" id="cuisine" placeholder="Cuisine">
+        <input type="text" id="phone" placeholder="Phone">
+        <input type="text" id="website" placeholder="Website">
+        <p><b>Select a location by clicking on the map.</b></p>
+        <button id="addRestaurantBtn">Add Restaurant</button>
+    </div>
+
+    <div id="favoritesTab" class="tab">
+        <h3>Favorite Dishes</h3>
+        <select id="restaurantDropdown">
+            <option value="" disabled selected>Select a restaurant</option>
+        </select>
+        <input type="text" id="favoriteDishInput" placeholder="Add a favorite dish">
+        <button id="addFavoriteDishBtn">Add Favorite Dish</button>
+        <button id="viewFavoritesBtn">View All Favorite Dishes</button>
+        <ul id="favoriteDishesList"></ul>
+    </div>
+
+    <div id="searchBar">
+        <input type="text" id="searchInput" placeholder="Search for a restaurant or cuisine">
+        <button id="searchBtn">Search</button>
+    </div>
+
+    <script>
+        require([
+            "esri/Map",
+            "esri/views/MapView",
+            "esri/layers/FeatureLayer",
+            "esri/Graphic"
+        ], function (Map, MapView, FeatureLayer, Graphic) {
+            const map = new Map({
+                basemap: "streets-navigation-vector"
+            });
+
+            const view = new MapView({
+                container: "viewDiv",
+                map: map,
+                center: [-82.3248, 29.6516], // Gainesville, FL
+                zoom: 13
+            });
+
+            // Restaurants Feature Layer with Popups
+            const restaurantsLayer = new FeatureLayer({
+                url: "https://services.arcgis.com/LBbVDC0hKPAnLRpO/arcgis/rest/services/restaurants_finallayer/FeatureServer/0",
+                outFields: ["*"],
+                popupTemplate: {
+                    title: "{name}",
+                    content: `
+                        <b>Cuisine:</b> {cuisine}<br>
+                        <b>Phone:</b> {phone}<br>
+                        <b>Website:</b> <a href="{website}" target="_blank">{website}</a>
+                    `
+                }
+            });
+            map.add(restaurantsLayer);
+
+            // Favorite Dishes Layer (Non-Spatial)
+            const favoriteDishesLayer = new FeatureLayer({
+                url: "https://services.arcgis.com/LBbVDC0hKPAnLRpO/arcgis/rest/services/Favorite_Dishes/FeatureServer",
+                outFields: ["*"]
+            });
+
+            // Store selected point for new restaurants
+            let selectedPoint = null;
+
+            // Handle map clicks for selecting a location
+            view.on("click", (event) => {
+                selectedPoint = event.mapPoint;
+                view.graphics.removeAll();
+                const pointGraphic = new Graphic({
+                    geometry: selectedPoint,
+                    symbol: {
+                        type: "simple-marker",
+                        color: "red",
+                        size: "12px",
+                        outline: { color: "white", width: 1 }
+                    }
+                });
+                view.graphics.add(pointGraphic);
+            });
+
+            // Add a new restaurant
+            document.getElementById("addRestaurantBtn").addEventListener("click", () => {
+                const name = document.getElementById("restaurantName").value;
+                const cuisine = document.getElementById("cuisine").value;
+                const phone = document.getElementById("phone").value;
+                const website = document.getElementById("website").value;
+
+                if (!name || !cuisine) {
+                    alert("Please provide at least a name and cuisine for the restaurant.");
+                    return;
+                }
+
+                if (!selectedPoint) {
+                    alert("Please click on the map to select a location for the new restaurant.");
+                    return;
+                }
+
+                const newFeature = {
+                    geometry: selectedPoint,
+                    attributes: {
+                        name: name,
+                        cuisine: cuisine,
+                        phone: phone,
+                        website: website
+                    }
+                };
+
+                restaurantsLayer.applyEdits({
+                    addFeatures: [newFeature]
+                }).then((result) => {
+                    if (result.addFeatureResults[0].error) {
+                        console.error("Error adding restaurant:", result.addFeatureResults[0].error);
+                        alert("Failed to add the restaurant. Please try again.");
+                        return;
+                    }
+                    alert("New restaurant added successfully!");
+                    restaurantsLayer.refresh();
+                    selectedPoint = null;
+
+                    // Clear input fields
+                    document.getElementById("restaurantName").value = "";
+                    document.getElementById("cuisine").value = "";
+                    document.getElementById("phone").value = "";
+                    document.getElementById("website").value = "";
+                }).catch((error) => {
+                    console.error("Error adding restaurant:", error);
+                    alert("Error adding restaurant.");
+                });
+            });
+
+            // Populate restaurant dropdown
+            function updateDropdown() {
+                const dropdown = document.getElementById("restaurantDropdown");
+                dropdown.innerHTML = '<option value="" disabled selected>Select a restaurant</option>';
+                restaurantsLayer.queryFeatures({
+                    where: "1=1",
+                    outFields: ["name"],
+                    returnGeometry: false
+                }).then((response) => {
+                    response.features.forEach((feature) => {
+                        const option = document.createElement("option");
+                        option.value = feature.attributes.name;
+                        option.text = feature.attributes.name;
+                        dropdown.appendChild(option);
+                    });
+                }).catch((error) => {
+                    console.error("Error populating dropdown:", error);
+                });
+            }
+
+            // View favorite dishes
+            document.getElementById("viewFavoritesBtn").addEventListener("click", () => {
+                const selectedRestaurant = document.getElementById("restaurantDropdown").value;
+
+                if (!selectedRestaurant) {
+                    alert("Please select a restaurant to view favorite dishes.");
+                    return;
+                }
+
+                const sanitizedRestaurantName = selectedRestaurant.replace(/'/g, "''");
+
+                favoriteDishesLayer.queryFeatures({
+                    where: `restaurantName = '${sanitizedRestaurantName}'`,
+                    outFields: ["favoriteDish"],
+                    returnGeometry: false
+                }).then((response) => {
+                    const list = document.getElementById("favoriteDishesList");
+                    list.innerHTML = "";
+                    if (response.features.length === 0) {
+                        list.innerHTML = "<li>No favorite dishes found for this restaurant.</li>";
+                        return;
+                    }
+                    response.features.forEach((feature) => {
+                        const li = document.createElement("li");
+                        li.textContent = feature.attributes.favoriteDish;
+                        list.appendChild(li);
+                    });
+                }).catch((error) => {
+                    console.error("Error querying favorite dishes:", error);
+                    alert("Error retrieving favorite dishes. Check the console for details.");
+                });
+            });
+
+            // Search functionality
+            document.getElementById("searchBtn").addEventListener("click", () => {
+                let query = document.getElementById("searchInput").value.toLowerCase();
+
+                // Escape single quotes in the input
+                query = query.replace(/'/g, "''");
+
+                restaurantsLayer.definitionExpression = `
+                    lower(name) LIKE '%${query}%' OR lower(cuisine) LIKE '%${query}%'
+                `;
+            });
+
+            // Initialize
+            updateDropdown();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,91 @@
+//cleaning & formatting data
+//data from https://overpass-turbo.eu/ 
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Process External GeoJSON</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+        // Function to load and process GeoJSON file
+        function processGeoJSONFile(file) {
+            const reader = new FileReader();
+
+            // When the file is loaded
+            reader.onload = function(event) {
+                try {
+                    console.log("File loaded successfully!");
+                    const rawGeoJSON = JSON.parse(event.target.result); // Parse GeoJSON
+                    console.log("GeoJSON parsed successfully!", rawGeoJSON);
+
+                    // Function to parse opening_hours
+                    function parseOpeningHours(openingHours) {
+                        const daysMap = { "Mo": 1, "Tu": 2, "We": 3, "Th": 4, "Fr": 5, "Sa": 6, "Su": 0 };
+                        const hours = {};
+                        if (openingHours && typeof openingHours === "string") {
+                            const entries = openingHours.split(';');
+                            entries.forEach(entry => {
+                                const [days, times] = entry.split(' ');
+                                if (!days || !times) return; // Skip malformed entries
+                                const [startTime, endTime] = times.split('-').map(t => t.replace(':', ''));
+                                if (days.includes('-')) {
+                                    const [startDay, endDay] = days.split('-');
+                                    const startIdx = daysMap[startDay];
+                                    const endIdx = daysMap[endDay];
+                                    for (let i = startIdx; i <= endIdx; i++) {
+                                        hours[i] = `${startTime}-${endTime}`;
+                                    }
+                                } else {
+                                    const dayIdx = daysMap[days];
+                                    hours[dayIdx] = `${startTime}-${endTime}`;
+                                }
+                            });
+                        }
+                        return hours;
+                    }
+
+                    // Process each feature
+                    rawGeoJSON.features.forEach(feature => {
+                        const openingHours = feature.properties.opening_hours;
+                        if (openingHours && typeof openingHours === "string") {
+                            feature.properties.hours = parseOpeningHours(openingHours);
+                            delete feature.properties.opening_hours; // Remove the old field
+                        } else {
+                            feature.properties.hours = null; // Set to null if missing
+                        }
+                    });
+
+                    console.log("GeoJSON processed successfully!", rawGeoJSON);
+
+                    // Save the processed GeoJSON
+                    const blob = new Blob([JSON.stringify(rawGeoJSON, null, 2)], { type: "application/json" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = "processed_restaurants.geojson";
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    console.log("Processed GeoJSON file downloaded.");
+                } catch (error) {
+                    console.error("Error processing GeoJSON:", error);
+                }
+            };
+
+            // When an error occurs during file reading
+            reader.onerror = function(error) {
+                console.error("Error reading file:", error);
+            };
+
+            // Read the file as text
+            console.log("Reading file...");
+            reader.readAsText(file);
+        }
+    </script>
+</head>
+<body>
+    <h1>GeoJSON Processor</h1>
+    <p>Upload your GeoJSON file to process it and add formatted opening hours.</p>
+    <input type="file" accept=".geojson" onchange="processGeoJSONFile(this.files[0])">
+</body>
+</html>
